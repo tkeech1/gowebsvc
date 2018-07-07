@@ -6,9 +6,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
+	kitlog "github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/assert"
 	service "github.com/tkeech1/gowebsvc/svc"
 )
@@ -16,7 +18,7 @@ import (
 func Test_Greet(t *testing.T) {
 	tests := map[string]struct {
 		ctx              context.Context
-		svc              service.GreetingService
+		svc              service.Greeter
 		greeting         string
 		expectedResponse string
 		errorResponse    error
@@ -49,31 +51,36 @@ func Test_Greet(t *testing.T) {
 func Test_GreetingService(t *testing.T) {
 
 	tests := map[string]struct {
-		svc                service.GreetingService
+		svc                service.Greeter
+		logger             kitlog.Logger
 		greeting           []byte
 		expectedResponse   string
 		httpStatusResponse int
 	}{
 		"success": {
 			svc:                service.GreetingService{},
+			logger:             kitlog.NewLogfmtLogger(os.Stdout),
 			greeting:           []byte(`{"s":"hello"}`),
 			expectedResponse:   `{"greeting":"hello"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_nogreeting": {
 			svc:                service.GreetingService{},
+			logger:             kitlog.NewLogfmtLogger(os.Stdout),
 			greeting:           []byte(`{"s":""}`),
 			expectedResponse:   `{"greeting":"","err":"empty greeting"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_emptyjson": {
 			svc:                service.GreetingService{},
+			logger:             kitlog.NewLogfmtLogger(os.Stdout),
 			greeting:           []byte(`{}`),
 			expectedResponse:   `{"greeting":"","err":"empty greeting"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_emptymessage": {
 			svc:                service.GreetingService{},
+			logger:             kitlog.NewLogfmtLogger(os.Stdout),
 			greeting:           []byte(``),
 			expectedResponse:   `EOF`,
 			httpStatusResponse: http.StatusInternalServerError,
@@ -82,6 +89,8 @@ func Test_GreetingService(t *testing.T) {
 
 	for name, test := range tests {
 		t.Logf("Running test case: %s", name)
+		test.svc = loggingMiddleware{test.logger, test.svc}
+
 		req, err := http.NewRequest("POST", "/greeting", bytes.NewBuffer(test.greeting))
 		if err != nil {
 			t.Errorf(err.Error())
@@ -102,13 +111,15 @@ func Test_GreetingServiceCancelContext(t *testing.T) {
 	defer cancel()
 
 	tests := map[string]struct {
-		svc                service.GreetingService
+		svc                service.Greeter
+		logger             kitlog.Logger
 		greeting           []byte
 		expectedResponse   string
 		httpStatusResponse int
 	}{
 		"success": {
 			svc:                service.GreetingService{},
+			logger:             kitlog.NewLogfmtLogger(os.Stdout),
 			greeting:           []byte(`{"s":"hello"}`),
 			expectedResponse:   `{"greeting":"","err":"request cancelled"}` + "\n",
 			httpStatusResponse: http.StatusOK,
@@ -117,6 +128,8 @@ func Test_GreetingServiceCancelContext(t *testing.T) {
 
 	for name, test := range tests {
 		t.Logf("Running test case: %s", name)
+		test.svc = loggingMiddleware{test.logger, test.svc}
+
 		req, err := http.NewRequest("POST", "/greeting", bytes.NewBuffer(test.greeting))
 		req = req.WithContext(ctx)
 		if err != nil {
@@ -134,43 +147,50 @@ func Test_GreetingServiceCancelContext(t *testing.T) {
 func Test_ExpensiveService(t *testing.T) {
 
 	tests := map[string]struct {
-		svc                service.GreetingService
+		svc                service.Greeter
+		logger             kitlog.Logger
 		expensive          []byte
 		expectedResponse   string
 		httpStatusResponse int
 	}{
 		"success": {
 			svc:                service.GreetingService{},
+			logger:             kitlog.NewLogfmtLogger(os.Stdout),
 			expensive:          []byte(`{"connection_string":"c1","username":"u1","password":"p1"}`),
 			expectedResponse:   `{"status":"c1u1p1"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_noconnection": {
 			svc:                service.GreetingService{},
+			logger:             kitlog.NewLogfmtLogger(os.Stdout),
 			expensive:          []byte(`{"connection_string":"","username":"u1","password":"p1"}`),
 			expectedResponse:   `{"status":"","err":"missing connectionString"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_nousername": {
 			svc:                service.GreetingService{},
+			logger:             kitlog.NewLogfmtLogger(os.Stdout),
 			expensive:          []byte(`{"connection_string":"c1","username":"","password":"p1"}`),
 			expectedResponse:   `{"status":"","err":"missing username"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_nopassword": {
 			svc:                service.GreetingService{},
+			logger:             kitlog.NewLogfmtLogger(os.Stdout),
 			expensive:          []byte(`{"connection_string":"c1","username":"u1","password":""}`),
 			expectedResponse:   `{"status":"","err":"missing password"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_emptyjson": {
 			svc:                service.GreetingService{},
+			logger:             kitlog.NewLogfmtLogger(os.Stdout),
 			expensive:          []byte(`{}`),
 			expectedResponse:   `{"status":"","err":"missing connectionString"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_emptymessage": {
 			svc:                service.GreetingService{},
+			logger:             kitlog.NewLogfmtLogger(os.Stdout),
 			expensive:          []byte(``),
 			expectedResponse:   `EOF`,
 			httpStatusResponse: http.StatusInternalServerError,
@@ -179,6 +199,7 @@ func Test_ExpensiveService(t *testing.T) {
 
 	for name, test := range tests {
 		t.Logf("Running test case: %s", name)
+		test.svc = loggingMiddleware{test.logger, test.svc}
 		req, err := http.NewRequest("POST", "/expensive", bytes.NewBuffer(test.expensive))
 		if err != nil {
 			t.Errorf(err.Error())
@@ -195,26 +216,27 @@ func Test_ExpensiveService(t *testing.T) {
 func Test_ExpensiveServiceMultipleTries(t *testing.T) {
 
 	tests := map[string]struct {
-		svc                service.GreetingService
 		expensive          []byte
 		expectedResponse   string
 		httpStatusResponse int
 	}{
 		"success": {
-			svc:                service.GreetingService{},
 			expensive:          []byte(`{"connection_string":"c1","username":"u2","password":"p3"}`),
 			expectedResponse:   `{"status":"c1u2p3"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"2nd_try": {
-			svc:                service.GreetingService{},
 			expensive:          []byte(`{"connection_string":"","username":"hello","password":"hello"}`),
 			expectedResponse:   `{"status":"already initialized"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 	}
 
-	handler := getExpensiveHandler(tests["success"].svc)
+	var svc service.Greeter
+	svc = service.GreetingService{}
+	logger := kitlog.NewLogfmtLogger(os.Stdout)
+	svc = loggingMiddleware{logger, svc}
+	handler := getExpensiveHandler(svc)
 
 	t.Logf("Running test case: %s", "success")
 	req, err := http.NewRequest("POST", "/expensive", bytes.NewBuffer(tests["success"].expensive))

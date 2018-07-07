@@ -11,9 +11,7 @@ type Greeter interface {
 	Expensive(context.Context, string, string, string) (string, error)
 }
 
-type GreetingService struct {
-	connection string
-}
+type GreetingService struct{}
 
 func (g GreetingService) Greet(ctx context.Context, greeting string) (string, error) {
 	ch := make(chan string)
