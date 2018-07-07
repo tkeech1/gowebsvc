@@ -10,3 +10,6 @@ test-simple: clean-testcache
 
 test: clean-testcache	
 	go test -race -covermode=atomic ./...
+
+deps: 
+	go get -v -t -d ./...
