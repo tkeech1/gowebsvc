@@ -8,10 +8,10 @@ test-gokit: clean-testcache
 test-simple: clean-testcache	
 	go test -v -race -covermode=atomic github.com/tkeech1/gowebsvc/simple/
 
-test: 
+test: clean-testcache	
 	go test -race -covermode=atomic ./...
 
-test-circleci: clean-testcache	
+test-circleci: 
 	go test -race -covermode=atomic -coverprofile=coverage.txt ./...
 
 deps: 
