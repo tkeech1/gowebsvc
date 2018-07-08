@@ -13,6 +13,11 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/assert"
 	service "github.com/tkeech1/gowebsvc/svc"
+
+	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
+	stdprometheus "github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/expfmt"
 )
 
 func Test_Greet(t *testing.T) {
@@ -49,6 +54,20 @@ func Test_Greet(t *testing.T) {
 }
 
 func Test_GreetingService(t *testing.T) {
+
+	fieldKeys := []string{"method", "error"}
+	requestCount := kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
+		Namespace: "my_group",
+		Subsystem: "greeting_service",
+		Name:      "request_count",
+		Help:      "Number of requests received.",
+	}, fieldKeys)
+	requestLatency := kitprometheus.NewSummaryFrom(stdprometheus.SummaryOpts{
+		Namespace: "my_group",
+		Subsystem: "greeting_service",
+		Name:      "request_latency_microseconds",
+		Help:      "Total duration of requests in microseconds.",
+	}, fieldKeys)
 
 	tests := map[string]struct {
 		svc                service.Greeter
@@ -90,6 +109,7 @@ func Test_GreetingService(t *testing.T) {
 	for name, test := range tests {
 		t.Logf("Running test case: %s", name)
 		test.svc = loggingMiddleware{test.logger, test.svc}
+		test.svc = instrumentingMiddleware{requestCount, requestLatency, test.svc}
 
 		req, err := http.NewRequest("POST", "/greeting", bytes.NewBuffer(test.greeting))
 		if err != nil {
@@ -101,6 +121,30 @@ func Test_GreetingService(t *testing.T) {
 		handler.ServeHTTP(w, req)
 		assert.Equal(t, test.expectedResponse, w.Body.String())
 		assert.Equal(t, test.httpStatusResponse, w.Code)
+	}
+
+	// check prometheus stats
+	req, err := http.NewRequest("GET", "/metrics", nil)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+	w := httptest.NewRecorder()
+	promhttp.Handler().ServeHTTP(w, req)
+
+	parser := expfmt.TextParser{}
+	parsedData, err := parser.TextToMetricFamilies(w.Body)
+	if err != nil {
+		t.Fatal(" unable to get prometheus metrics ")
+	}
+	for _, metric := range parsedData["my_group_greeting_service_request_count"].GetMetric() {
+		for _, label := range metric.GetLabel() {
+			if label.GetName() == "error" && label.GetValue() == "true" {
+				assert.Equal(t, 2.0, metric.GetCounter().GetValue())
+			}
+			if label.GetName() == "error" && label.GetValue() == "false" {
+				assert.Equal(t, 1.0, metric.GetCounter().GetValue())
+			}
+		}
 	}
 }
 

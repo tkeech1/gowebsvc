@@ -16,3 +16,11 @@ test-circleci:
 
 deps: 
 	go get -v -t -d ./...
+
+run-gokit:	
+	cd gokit/; go build; ./gokit
+
+curl-greeting:
+	#curl -d "{\"s\":\"hello\"}" -X POST http://localhost:8080/greeting
+	curl -d "{\"s\":\"\"}" -X POST http://localhost:8080/greeting
+	
