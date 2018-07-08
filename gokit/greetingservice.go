@@ -6,11 +6,11 @@ import (
 
 	"net/http"
 
-	kitlog "github.com/go-kit/kit/log"
 	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
 	httptransport "github.com/go-kit/kit/transport/http"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	middleware "github.com/tkeech1/gowebsvc/middleware"
 	service "github.com/tkeech1/gowebsvc/svc"
 )
 
@@ -32,7 +32,8 @@ func getExpensiveHandler(svc service.Greeter) *httptransport.Server {
 
 // main
 func main() {
-	logger := kitlog.NewLogfmtLogger(os.Stdout)
+	//logger := kitlog.NewLogfmtLogger(os.Stdout)
+	logger := log.New(os.Stdout, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile)
 
 	fieldKeys := []string{"method", "error"}
 	requestCount := kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
@@ -50,8 +51,8 @@ func main() {
 
 	var svc service.Greeter
 	svc = service.GreetingService{}
-	svc = loggingMiddleware{logger, svc}
-	svc = instrumentingMiddleware{requestCount, requestLatency, svc}
+	svc = middleware.LoggingMiddleware{logger, svc}
+	svc = middleware.InstrumentingMiddleware{requestCount, requestLatency, svc}
 
 	greetingHandler := getGreetingHandler(svc)
 	expensiveHandler := getExpensiveHandler(svc)

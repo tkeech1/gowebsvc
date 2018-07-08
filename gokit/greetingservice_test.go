@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
 
-	kitlog "github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/assert"
+	middleware "github.com/tkeech1/gowebsvc/middleware"
 	service "github.com/tkeech1/gowebsvc/svc"
 
 	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
@@ -57,13 +58,13 @@ func Test_GreetingService(t *testing.T) {
 
 	fieldKeys := []string{"method", "error"}
 	requestCount := kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
-		Namespace: "my_group",
+		Namespace: "Test_GreetingService",
 		Subsystem: "greeting_service",
 		Name:      "request_count",
 		Help:      "Number of requests received.",
 	}, fieldKeys)
 	requestLatency := kitprometheus.NewSummaryFrom(stdprometheus.SummaryOpts{
-		Namespace: "my_group",
+		Namespace: "Test_GreetingService",
 		Subsystem: "greeting_service",
 		Name:      "request_latency_microseconds",
 		Help:      "Total duration of requests in microseconds.",
@@ -71,35 +72,35 @@ func Test_GreetingService(t *testing.T) {
 
 	tests := map[string]struct {
 		svc                service.Greeter
-		logger             kitlog.Logger
+		logger             *log.Logger
 		greeting           []byte
 		expectedResponse   string
 		httpStatusResponse int
 	}{
 		"success": {
 			svc:                service.GreetingService{},
-			logger:             kitlog.NewLogfmtLogger(os.Stdout),
+			logger:             log.New(os.Stdout, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile),
 			greeting:           []byte(`{"s":"hello"}`),
 			expectedResponse:   `{"greeting":"hello"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_nogreeting": {
 			svc:                service.GreetingService{},
-			logger:             kitlog.NewLogfmtLogger(os.Stdout),
+			logger:             log.New(os.Stdout, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile),
 			greeting:           []byte(`{"s":""}`),
 			expectedResponse:   `{"greeting":"","err":"empty greeting"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_emptyjson": {
 			svc:                service.GreetingService{},
-			logger:             kitlog.NewLogfmtLogger(os.Stdout),
+			logger:             log.New(os.Stdout, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile),
 			greeting:           []byte(`{}`),
 			expectedResponse:   `{"greeting":"","err":"empty greeting"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_emptymessage": {
 			svc:                service.GreetingService{},
-			logger:             kitlog.NewLogfmtLogger(os.Stdout),
+			logger:             log.New(os.Stdout, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile),
 			greeting:           []byte(``),
 			expectedResponse:   `EOF`,
 			httpStatusResponse: http.StatusInternalServerError,
@@ -108,8 +109,8 @@ func Test_GreetingService(t *testing.T) {
 
 	for name, test := range tests {
 		t.Logf("Running test case: %s", name)
-		test.svc = loggingMiddleware{test.logger, test.svc}
-		test.svc = instrumentingMiddleware{requestCount, requestLatency, test.svc}
+		test.svc = middleware.LoggingMiddleware{test.logger, test.svc}
+		test.svc = middleware.InstrumentingMiddleware{requestCount, requestLatency, test.svc}
 
 		req, err := http.NewRequest("POST", "/greeting", bytes.NewBuffer(test.greeting))
 		if err != nil {
@@ -136,16 +137,20 @@ func Test_GreetingService(t *testing.T) {
 	if err != nil {
 		t.Fatal(" unable to get prometheus metrics ")
 	}
-	for _, metric := range parsedData["my_group_greeting_service_request_count"].GetMetric() {
+
+	var errorCount, successCount float64
+	for _, metric := range parsedData["Test_GreetingService_greeting_service_request_count"].GetMetric() {
 		for _, label := range metric.GetLabel() {
 			if label.GetName() == "error" && label.GetValue() == "true" {
-				assert.Equal(t, 2.0, metric.GetCounter().GetValue())
+				errorCount = metric.GetCounter().GetValue()
 			}
 			if label.GetName() == "error" && label.GetValue() == "false" {
-				assert.Equal(t, 1.0, metric.GetCounter().GetValue())
+				successCount = metric.GetCounter().GetValue()
 			}
 		}
 	}
+	assert.Equal(t, 2.0, errorCount)
+	assert.Equal(t, 1.0, successCount)
 }
 
 func Test_GreetingServiceCancelContext(t *testing.T) {
@@ -154,16 +159,30 @@ func Test_GreetingServiceCancelContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(ctx, 0*time.Millisecond)
 	defer cancel()
 
+	fieldKeys := []string{"method", "error"}
+	requestCount := kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
+		Namespace: "Test_GreetingServiceCancelContext",
+		Subsystem: "greeting_service",
+		Name:      "request_count",
+		Help:      "Number of requests received.",
+	}, fieldKeys)
+	requestLatency := kitprometheus.NewSummaryFrom(stdprometheus.SummaryOpts{
+		Namespace: "Test_GreetingServiceCancelContext",
+		Subsystem: "greeting_service",
+		Name:      "request_latency_microseconds",
+		Help:      "Total duration of requests in microseconds.",
+	}, fieldKeys)
+
 	tests := map[string]struct {
 		svc                service.Greeter
-		logger             kitlog.Logger
+		logger             *log.Logger
 		greeting           []byte
 		expectedResponse   string
 		httpStatusResponse int
 	}{
 		"success": {
 			svc:                service.GreetingService{},
-			logger:             kitlog.NewLogfmtLogger(os.Stdout),
+			logger:             log.New(os.Stdout, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile),
 			greeting:           []byte(`{"s":"hello"}`),
 			expectedResponse:   `{"greeting":"","err":"request cancelled"}` + "\n",
 			httpStatusResponse: http.StatusOK,
@@ -172,7 +191,8 @@ func Test_GreetingServiceCancelContext(t *testing.T) {
 
 	for name, test := range tests {
 		t.Logf("Running test case: %s", name)
-		test.svc = loggingMiddleware{test.logger, test.svc}
+		test.svc = middleware.LoggingMiddleware{test.logger, test.svc}
+		test.svc = middleware.InstrumentingMiddleware{requestCount, requestLatency, test.svc}
 
 		req, err := http.NewRequest("POST", "/greeting", bytes.NewBuffer(test.greeting))
 		req = req.WithContext(ctx)
@@ -186,55 +206,96 @@ func Test_GreetingServiceCancelContext(t *testing.T) {
 		assert.Equal(t, test.expectedResponse, w.Body.String())
 		assert.Equal(t, test.httpStatusResponse, w.Code)
 	}
+
+	// check prometheus stats
+	req, err := http.NewRequest("GET", "/metrics", nil)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+	w := httptest.NewRecorder()
+	promhttp.Handler().ServeHTTP(w, req)
+
+	parser := expfmt.TextParser{}
+	parsedData, err := parser.TextToMetricFamilies(w.Body)
+	if err != nil {
+		t.Fatal(" unable to get prometheus metrics ")
+	}
+	var errorCount, successCount float64
+	for _, metric := range parsedData["Test_GreetingServiceCancelContext_greeting_service_request_count"].GetMetric() {
+		for _, label := range metric.GetLabel() {
+			if label.GetName() == "error" && label.GetValue() == "true" {
+				errorCount = metric.GetCounter().GetValue()
+			}
+			if label.GetName() == "error" && label.GetValue() == "false" {
+				successCount = metric.GetCounter().GetValue()
+			}
+		}
+	}
+	assert.Equal(t, 1.0, errorCount)
+	assert.Equal(t, 0.0, successCount)
 }
 
 func Test_ExpensiveService(t *testing.T) {
 
+	fieldKeys := []string{"method", "error"}
+	requestCount := kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
+		Namespace: "Test_ExpensiveService",
+		Subsystem: "expensive_service",
+		Name:      "request_count",
+		Help:      "Number of requests received.",
+	}, fieldKeys)
+	requestLatency := kitprometheus.NewSummaryFrom(stdprometheus.SummaryOpts{
+		Namespace: "Test_ExpensiveService",
+		Subsystem: "expensive_service",
+		Name:      "request_latency_microseconds",
+		Help:      "Total duration of requests in microseconds.",
+	}, fieldKeys)
+
 	tests := map[string]struct {
 		svc                service.Greeter
-		logger             kitlog.Logger
+		logger             *log.Logger
 		expensive          []byte
 		expectedResponse   string
 		httpStatusResponse int
 	}{
 		"success": {
 			svc:                service.GreetingService{},
-			logger:             kitlog.NewLogfmtLogger(os.Stdout),
+			logger:             log.New(os.Stdout, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile),
 			expensive:          []byte(`{"connection_string":"c1","username":"u1","password":"p1"}`),
 			expectedResponse:   `{"status":"c1u1p1"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_noconnection": {
 			svc:                service.GreetingService{},
-			logger:             kitlog.NewLogfmtLogger(os.Stdout),
+			logger:             log.New(os.Stdout, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile),
 			expensive:          []byte(`{"connection_string":"","username":"u1","password":"p1"}`),
 			expectedResponse:   `{"status":"","err":"missing connectionString"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_nousername": {
 			svc:                service.GreetingService{},
-			logger:             kitlog.NewLogfmtLogger(os.Stdout),
+			logger:             log.New(os.Stdout, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile),
 			expensive:          []byte(`{"connection_string":"c1","username":"","password":"p1"}`),
 			expectedResponse:   `{"status":"","err":"missing username"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_nopassword": {
 			svc:                service.GreetingService{},
-			logger:             kitlog.NewLogfmtLogger(os.Stdout),
+			logger:             log.New(os.Stdout, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile),
 			expensive:          []byte(`{"connection_string":"c1","username":"u1","password":""}`),
 			expectedResponse:   `{"status":"","err":"missing password"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_emptyjson": {
 			svc:                service.GreetingService{},
-			logger:             kitlog.NewLogfmtLogger(os.Stdout),
+			logger:             log.New(os.Stdout, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile),
 			expensive:          []byte(`{}`),
 			expectedResponse:   `{"status":"","err":"missing connectionString"}` + "\n",
 			httpStatusResponse: http.StatusOK,
 		},
 		"error_emptymessage": {
 			svc:                service.GreetingService{},
-			logger:             kitlog.NewLogfmtLogger(os.Stdout),
+			logger:             log.New(os.Stdout, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile),
 			expensive:          []byte(``),
 			expectedResponse:   `EOF`,
 			httpStatusResponse: http.StatusInternalServerError,
@@ -243,7 +304,8 @@ func Test_ExpensiveService(t *testing.T) {
 
 	for name, test := range tests {
 		t.Logf("Running test case: %s", name)
-		test.svc = loggingMiddleware{test.logger, test.svc}
+		test.svc = middleware.LoggingMiddleware{test.logger, test.svc}
+		test.svc = middleware.InstrumentingMiddleware{requestCount, requestLatency, test.svc}
 		req, err := http.NewRequest("POST", "/expensive", bytes.NewBuffer(test.expensive))
 		if err != nil {
 			t.Errorf(err.Error())
@@ -255,6 +317,33 @@ func Test_ExpensiveService(t *testing.T) {
 		assert.Equal(t, test.expectedResponse, w.Body.String())
 		assert.Equal(t, test.httpStatusResponse, w.Code)
 	}
+
+	// check prometheus stats
+	req, err := http.NewRequest("GET", "/metrics", nil)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+	w := httptest.NewRecorder()
+	promhttp.Handler().ServeHTTP(w, req)
+
+	parser := expfmt.TextParser{}
+	parsedData, err := parser.TextToMetricFamilies(w.Body)
+	if err != nil {
+		t.Fatal(" unable to get prometheus metrics ")
+	}
+	var errorCount, successCount float64
+	for _, metric := range parsedData["Test_ExpensiveService_expensive_service_request_count"].GetMetric() {
+		for _, label := range metric.GetLabel() {
+			if label.GetName() == "error" && label.GetValue() == "true" {
+				errorCount = metric.GetCounter().GetValue()
+			}
+			if label.GetName() == "error" && label.GetValue() == "false" {
+				successCount = metric.GetCounter().GetValue()
+			}
+		}
+	}
+	assert.Equal(t, 4.0, errorCount)
+	assert.Equal(t, 1.0, successCount)
 }
 
 func Test_ExpensiveServiceMultipleTries(t *testing.T) {
@@ -278,8 +367,8 @@ func Test_ExpensiveServiceMultipleTries(t *testing.T) {
 
 	var svc service.Greeter
 	svc = service.GreetingService{}
-	logger := kitlog.NewLogfmtLogger(os.Stdout)
-	svc = loggingMiddleware{logger, svc}
+	logger := log.New(os.Stdout, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile)
+	svc = middleware.LoggingMiddleware{logger, svc}
 	handler := getExpensiveHandler(svc)
 
 	t.Logf("Running test case: %s", "success")
@@ -303,32 +392,3 @@ func Test_ExpensiveServiceMultipleTries(t *testing.T) {
 	assert.Equal(t, tests["2nd_try"].httpStatusResponse, w.Code)
 
 }
-
-/*
-func TestServer_HandleGreetingMiddlewareCancelContext(t *testing.T) {
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
-
-	srv := server{}
-
-	req, err := http.NewRequest("GET", "/", nil)
-	if err != nil {
-		t.Errorf(err.Error())
-	}
-	req = req.WithContext(ctx)
-
-	w := httptest.NewRecorder()
-	handler := http.HandlerFunc(srv.handleGreeting("test"))
-	handler.ServeHTTP(w, req)
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("Unexpected response %v\n", w)
-	}
-
-	expected := "context deadline exceeded\n"
-	if w.Body.String() != expected {
-		t.Errorf("handler returned unexpected body: got %v want %v",
-			w.Body.String(), expected)
-	}
-}
-*/

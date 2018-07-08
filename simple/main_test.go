@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	middleware "github.com/tkeech1/gowebsvc/middleware"
 	service "github.com/tkeech1/gowebsvc/svc"
 
 	"github.com/stretchr/testify/assert"
@@ -96,7 +97,7 @@ func Test_GreetingService(t *testing.T) {
 		}
 		w := httptest.NewRecorder()
 
-		logMiddleware := loggingMiddleware{logger: test.logger, next: test.svc}
+		logMiddleware := middleware.LoggingMiddleware{Logger: test.logger, Next: test.svc}
 		s := server{transport: HttpJson{}, svc: logMiddleware}
 
 		handler := s.handleGreeting()
@@ -137,7 +138,7 @@ func Test_GreetingServiceCancelContext(t *testing.T) {
 		}
 		w := httptest.NewRecorder()
 
-		logMiddleware := loggingMiddleware{logger: test.logger, next: test.svc}
+		logMiddleware := middleware.LoggingMiddleware{Logger: test.logger, Next: test.svc}
 		s := server{transport: HttpJson{}, svc: logMiddleware}
 
 		handler := s.handleGreeting()
@@ -208,7 +209,7 @@ func Test_ExpensiveService(t *testing.T) {
 		}
 		w := httptest.NewRecorder()
 
-		logMiddleware := loggingMiddleware{logger: test.logger, next: test.svc}
+		logMiddleware := middleware.LoggingMiddleware{Logger: test.logger, Next: test.svc}
 		s := server{transport: HttpJson{}, svc: logMiddleware}
 
 		handler := s.handleExpensive()
@@ -241,7 +242,7 @@ func Test_ExpensiveServiceMultipleTries(t *testing.T) {
 		},
 	}
 
-	logMiddleware := loggingMiddleware{logger: tests["success"].logger, next: tests["success"].svc}
+	logMiddleware := middleware.LoggingMiddleware{Logger: tests["success"].logger, Next: tests["success"].svc}
 	s := server{transport: HttpJson{}, svc: logMiddleware}
 	handler := s.handleExpensive()
 

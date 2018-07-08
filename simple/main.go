@@ -6,6 +6,7 @@ import (
 	"os"
 	"sync"
 
+	middleware "github.com/tkeech1/gowebsvc/middleware"
 	service "github.com/tkeech1/gowebsvc/svc"
 )
 
@@ -94,9 +95,9 @@ func (s *server) handleExpensive() http.HandlerFunc {
 }
 
 func main() {
-	logMiddleware := loggingMiddleware{
-		logger: log.New(os.Stdout, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile),
-		next:   service.GreetingService{},
+	logMiddleware := middleware.LoggingMiddleware{
+		Logger: log.New(os.Stdout, "LOG: ", log.Ldate|log.Ltime|log.Lshortfile),
+		Next:   service.GreetingService{},
 	}
 	s := server{transport: HttpJson{}, svc: logMiddleware}
 

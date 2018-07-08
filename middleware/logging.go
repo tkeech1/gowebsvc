@@ -1,4 +1,4 @@
-package main
+package middleware
 
 import (
 	"context"
@@ -8,18 +8,18 @@ import (
 	service "github.com/tkeech1/gowebsvc/svc"
 )
 
-type loggingMiddleware struct {
-	logger *log.Logger
-	next   service.Greeter
+type LoggingMiddleware struct {
+	Logger *log.Logger
+	Next   service.Greeter
 }
 
-func (mw loggingMiddleware) Greet(ctx context.Context, greeting string) (output string, err error) {
+func (mw LoggingMiddleware) Greet(ctx context.Context, greeting string) (output string, err error) {
 	defer func(begin time.Time) {
 		errMsg := ""
 		if err != nil {
 			errMsg = err.Error()
 		}
-		mw.logger.Print(
+		mw.Logger.Print(
 			"method: ", "Greet"+"; ",
 			"input: ", greeting+"; ",
 			"output: ", output+"; ",
@@ -28,17 +28,17 @@ func (mw loggingMiddleware) Greet(ctx context.Context, greeting string) (output 
 		)
 	}(time.Now())
 
-	output, err = mw.next.Greet(ctx, greeting)
+	output, err = mw.Next.Greet(ctx, greeting)
 	return
 }
 
-func (mw loggingMiddleware) Expensive(ctx context.Context, connectionString, username, password string) (n string, err error) {
+func (mw LoggingMiddleware) Expensive(ctx context.Context, connectionString, username, password string) (n string, err error) {
 	defer func(begin time.Time) {
 		errMsg := ""
 		if err != nil {
 			errMsg = err.Error()
 		}
-		mw.logger.Print(
+		mw.Logger.Print(
 			"method: ", "Expensive"+"; ",
 			"connectionString: ", connectionString+"; ",
 			"username: ", username+"; ",
@@ -49,6 +49,6 @@ func (mw loggingMiddleware) Expensive(ctx context.Context, connectionString, use
 		)
 	}(time.Now())
 
-	n, err = mw.next.Expensive(ctx, connectionString, username, password)
+	n, err = mw.Next.Expensive(ctx, connectionString, username, password)
 	return
 }
