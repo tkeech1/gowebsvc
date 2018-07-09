@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func main() {
+func main__() {
 	ctx := context.Background()
 	// cancel the request after one second
 	ctx, cancel := context.WithTimeout(ctx, time.Second*10)

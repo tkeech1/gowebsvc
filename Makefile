@@ -20,7 +20,15 @@ deps:
 run-gokit:	
 	cd gokit/; go build; ./gokit
 
+run-simple:	
+	cd simple/; go build; ./simple
+
 curl-greeting:
 	#curl -d "{\"s\":\"hello\"}" -X POST http://localhost:8080/greeting
 	curl -d "{\"s\":\"\"}" -X POST http://localhost:8080/greeting
+
+compile-grpc:
+	cd svc/; protoc greeting.proto --go_out=plugins=grpc:.
 	
+run-grpc-client:
+	cd client/; go build; ./client safsdfadfs

@@ -11,6 +11,10 @@ import (
 	"testing"
 	"time"
 
+	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
+	stdprometheus "github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/expfmt"
 	middleware "github.com/tkeech1/gowebsvc/middleware"
 	service "github.com/tkeech1/gowebsvc/svc"
 
@@ -51,6 +55,20 @@ func Test_Greet(t *testing.T) {
 }
 
 func Test_GreetingService(t *testing.T) {
+
+	fieldKeys := []string{"method", "error"}
+	requestCount := kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
+		Namespace: "Test_GreetingService",
+		Subsystem: "greeting_service",
+		Name:      "request_count",
+		Help:      "Number of requests received.",
+	}, fieldKeys)
+	requestLatency := kitprometheus.NewSummaryFrom(stdprometheus.SummaryOpts{
+		Namespace: "Test_GreetingService",
+		Subsystem: "greeting_service",
+		Name:      "request_latency_microseconds",
+		Help:      "Total duration of requests in microseconds.",
+	}, fieldKeys)
 
 	tests := map[string]struct {
 		svc                service.Greeter
@@ -97,7 +115,15 @@ func Test_GreetingService(t *testing.T) {
 		}
 		w := httptest.NewRecorder()
 
-		logMiddleware := middleware.LoggingMiddleware{Logger: test.logger, Next: test.svc}
+		instrumentingMiddleware := middleware.InstrumentingMiddleware{
+			RequestCount:   requestCount,
+			RequestLatency: requestLatency,
+			Next:           test.svc,
+		}
+		logMiddleware := middleware.LoggingMiddleware{
+			Logger: test.logger,
+			Next:   instrumentingMiddleware,
+		}
 		s := server{transport: HttpJson{}, svc: logMiddleware}
 
 		handler := s.handleGreeting()
@@ -105,6 +131,34 @@ func Test_GreetingService(t *testing.T) {
 		assert.Equal(t, test.expectedResponse, w.Body.String())
 		assert.Equal(t, test.httpStatusResponse, w.Code)
 	}
+
+	// check prometheus stats
+	req, err := http.NewRequest("GET", "/metrics", nil)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+	w := httptest.NewRecorder()
+	promhttp.Handler().ServeHTTP(w, req)
+
+	parser := expfmt.TextParser{}
+	parsedData, err := parser.TextToMetricFamilies(w.Body)
+	if err != nil {
+		t.Fatal(" unable to get prometheus metrics ")
+	}
+
+	var errorCount, successCount float64
+	for _, metric := range parsedData["Test_GreetingService_greeting_service_request_count"].GetMetric() {
+		for _, label := range metric.GetLabel() {
+			if label.GetName() == "error" && label.GetValue() == "true" {
+				errorCount = metric.GetCounter().GetValue()
+			}
+			if label.GetName() == "error" && label.GetValue() == "false" {
+				successCount = metric.GetCounter().GetValue()
+			}
+		}
+	}
+	assert.Equal(t, 2.0, errorCount)
+	assert.Equal(t, 1.0, successCount)
 }
 
 func Test_GreetingServiceCancelContext(t *testing.T) {
@@ -267,85 +321,3 @@ func Test_ExpensiveServiceMultipleTries(t *testing.T) {
 	assert.Equal(t, tests["2nd_try"].httpStatusResponse, w.Code)
 
 }
-
-// Non-table tests
-/*func TestServer_HandleGreetingMiddlewareSuccess(t *testing.T) {
-	srv := server{
-		//db:    mockDatabase,
-		//email: mockEmailSender,
-	}
-	//srv.routes()
-	req, err := http.NewRequest("GET", "/", nil)
-	if err != nil {
-		t.Errorf(err.Error())
-	}
-	w := httptest.NewRecorder()
-	handler := http.HandlerFunc(srv.MiddleWare(srv.handleGreeting("test")))
-	handler.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("Unexpected response %v\n", w)
-	}
-
-	//expected := `{"alive": true}`
-	expected := "added by middleware before test World added by middleware after"
-	if w.Body.String() != expected {
-		t.Errorf("handler returned unexpected body: got %v want %v",
-			w.Body.String(), expected)
-	}
-}
-
-func TestServer_HandleGreetingMiddlewareCancelContext(t *testing.T) {
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
-
-	srv := server{}
-
-	req, err := http.NewRequest("GET", "/", nil)
-	if err != nil {
-		t.Errorf(err.Error())
-	}
-	req = req.WithContext(ctx)
-
-	w := httptest.NewRecorder()
-	handler := http.HandlerFunc(srv.handleGreeting("test"))
-	handler.ServeHTTP(w, req)
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("Unexpected response %v\n", w)
-	}
-
-	expected := "context deadline exceeded\n"
-	if w.Body.String() != expected {
-		t.Errorf("handler returned unexpected body: got %v want %v",
-			w.Body.String(), expected)
-	}
-}
-
-func TestServer_HandleExpensiveSuccess(t *testing.T) {
-	text := "initialized an expensive operation"
-	// use a custom response
-	type response struct {
-		Greeting string `json:"response"`
-	}
-	httpResponse := response{
-		Greeting: text,
-	}
-	responseBody, err := json.Marshal(httpResponse)
-
-	srv := server{}
-	req, err := http.NewRequest("GET", "/expensive", nil)
-	if err != nil {
-		t.Errorf(err.Error())
-	}
-	w := httptest.NewRecorder()
-	handler := http.HandlerFunc(srv.handleExpensive(text))
-	handler.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("Unexpected response %v\n", w)
-	}
-
-	if w.Body.String() != string(responseBody) {
-		t.Errorf("handler returned unexpected body: got %v want %v",
-			w.Body.String(), string(responseBody))
-	}
-}*/

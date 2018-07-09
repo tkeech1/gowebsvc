@@ -13,6 +13,11 @@ type LoggingMiddleware struct {
 	Next   service.Greeter
 }
 
+type LoggingMiddlewareGRPC struct {
+	Logger *log.Logger
+	Next   service.GreeterGRPC
+}
+
 func (mw LoggingMiddleware) Greet(ctx context.Context, greeting string) (output string, err error) {
 	defer func(begin time.Time) {
 		errMsg := ""
@@ -50,5 +55,24 @@ func (mw LoggingMiddleware) Expensive(ctx context.Context, connectionString, use
 	}(time.Now())
 
 	n, err = mw.Next.Expensive(ctx, connectionString, username, password)
+	return
+}
+
+func (mw LoggingMiddlewareGRPC) GreetGRPC(ctx context.Context, in *service.GRPCGreetRequest) (output *service.GRPCGreetResponse, err error) {
+	defer func(begin time.Time) {
+		errMsg := ""
+		if err != nil {
+			errMsg = err.Error()
+		}
+		mw.Logger.Print(
+			"method: ", "Greet"+"; ",
+			"input: ", in.S+"; ",
+			"output: ", output.Greeting+"; ",
+			"err: ", errMsg+"; ",
+			"took: ", time.Since(begin),
+		)
+	}(time.Now())
+
+	output, err = mw.Next.GreetGRPC(ctx, in)
 	return
 }

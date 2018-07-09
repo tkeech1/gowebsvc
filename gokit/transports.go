@@ -2,10 +2,9 @@ package main
 
 import (
 	"context"
-	"sync"
-
 	"encoding/json"
 	"net/http"
+	"sync"
 
 	service "github.com/tkeech1/gowebsvc/svc"
 
