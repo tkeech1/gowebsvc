@@ -102,7 +102,7 @@ func (s *server) handleExpensive() http.HandlerFunc {
 
 func main() {
 
-	//GRPC
+	//GRPC 
 	go func() {
 
 		logMiddleware := middleware.LoggingMiddlewareGRPC{
