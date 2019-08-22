@@ -1,3 +1,9 @@
+init:
+	go mod init github.com/tkeech1/gowebsvc
+
+tidy:
+	go mod tidy
+
 clean-testcache:
 	go clean -testcache github.com/tkeech1/gowebsvc/gokit/
 	go clean -testcache github.com/tkeech1/gowebsvc/simple/
@@ -24,8 +30,8 @@ run-simple:
 	cd simple/; go build; ./simple
 
 curl-greeting:
-	#curl -d "{\"s\":\"hello\"}" -X POST http://localhost:8080/greeting
-	curl -d "{\"s\":\"\"}" -X POST http://localhost:8080/greeting
+	curl -d "{\"s\":\"hello\"}" -X POST http://localhost:8080/greeting
+	#curl -d "{\"s\":\"\"}" -X POST http://localhost:8080/greeting
 
 compile-grpc:
 	cd svc/; protoc greeting.proto --go_out=plugins=grpc:.
