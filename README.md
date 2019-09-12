@@ -6,3 +6,22 @@
 A comparison between gokit and simple web services.
 
 See the Makefile.  
+
+### Go Kit Web Service
+```
+make run-gokit
+```
+
+### Simple Web Service
+
+The simple web service runs a HTTP service on 8080 and a GRPC service on 50051. 
+
+```
+make run-simple
+```
+
+To use the GRPC client:
+
+``` 
+make run-grpc-client
+```
