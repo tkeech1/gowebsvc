@@ -36,7 +36,7 @@ steps:
     #fi
     #go build -v .
     make deps
-    test-circleci
-    bash <(curl -s https://codecov.io/bash)
+    make test-circleci
+    #bash <(curl -s https://codecov.io/bash)
   workingDirectory: '$(modulePath)'
   displayName: 'Get dependencies, then build'
