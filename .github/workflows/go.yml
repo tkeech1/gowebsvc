@@ -23,8 +23,12 @@ jobs:
         #    curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
         #    dep ensure
         #fi
+        #make test-circleci
+        #bash <(curl -s https://codecov.io/bash)
+
+    - name: Test
+      run: |
         make test-circleci
         bash <(curl -s https://codecov.io/bash)
-
-    - name: Build
-      run: go build -v .
+    #- name: Build
+    #  run: go build -v .
